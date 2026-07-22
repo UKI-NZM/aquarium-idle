@@ -2,6 +2,8 @@
 
 ブラウザで遊べる、のんびり系の放置育成ゲームです。生き物を育てて水槽を賑やかにしながら、パールを貯めていきます。
 
+▶️ **[今すぐ遊ぶ](https://uki-nzm.github.io/aquarium-idle/)**
+
 ## 遊び方
 
 `index.html` を開くだけで遊べます。ビルドもインストールも不要、単一ファイルで完結しています。
@@ -24,3 +26,9 @@
 ## フィードバック歓迎です
 
 遊んでみて気になった点・改善案があれば、Issueなどで気軽に教えてください。
+
+## クレジット・ライセンス
+
+このプロジェクトは [MIT License](LICENSE) で公開しています。
+
+生き物・装飾のアイコンには [Twemoji](https://github.com/jdecked/twemoji)（Copyright 2020 Twitter, Inc and other contributors、[CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)）を使用しています。
