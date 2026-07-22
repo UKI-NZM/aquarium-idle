@@ -372,6 +372,7 @@
     background:transparent; border:1px solid rgba(255,255,255,.3); color:var(--text);
   }
   .row .info{ flex:1; min-width:0; }
+  .bgRow .info{ min-width:96px; }
   .row .info .name{ font-size:13px; font-weight:600; }
   .row .info .sub{ font-size:11px; color:var(--sub); }
   .row button{
@@ -408,6 +409,7 @@
   .modalBox.dexBox{ max-width:560px; width:92vw; max-height:80vh; overflow-y:auto; text-align:left; }
   .tutorialStepCount{ font-size:11px; color:var(--sub); margin-bottom:2px; }
   #tutorialText{ font-size:13px; line-height:1.6; color:var(--text); }
+  #loginBonusText{ font-size:13px; line-height:1.6; white-space:pre-line; }
   .tutorialBtnRow{ display:flex; gap:8px; justify-content:center; margin-top:14px; }
   #freeCreatureConfirmText{ text-align:center; font-size:13px; line-height:1.6; padding:8px 0; }
   .hidden{ display:none; }
@@ -491,6 +493,14 @@
     <h3>おかえりなさい！</h3>
     <p id="offlineText"></p>
     <button id="offlineClose">受け取る</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="loginBonusModal">
+  <div class="modalBox">
+    <h3>🎉 ログインボーナス！</h3>
+    <p id="loginBonusText"></p>
+    <button id="loginBonusClose">受け取る</button>
   </div>
 </div>
 
@@ -580,8 +590,8 @@
     { id:"river", name:"川",     emoji:"🏞️", threshold:0 },
     { id:"lake",  name:"湖",     emoji:"🏔️", threshold:1000000 },
     { id:"ocean", name:"海",     emoji:"🌊", threshold:10000000 },
-    { id:"reef",  name:"珊瑚礁", emoji:"🎐", threshold:100000000 },
-    { id:"deepsea", name:"深海", emoji:"🐋", threshold:1000000000 },
+    { id:"reef",  name:"珊瑚礁", emoji:"🎐", threshold:5000000000 },
+    { id:"deepsea", name:"深海", emoji:"🐋", threshold:100000000000 },
     { id:"room",  name:"オリジナル部屋", emoji:"🏠", threshold:1000000 },
   ];
   const ROOM_STAGE_ID = "room";
@@ -797,6 +807,7 @@
       decorDisplayed: {},
       tutorialDone: false,
       lastLoginDate: null,
+      loginStreak: 0,
       inventory: { boost: 0, freeCreature: 0 },
       boostExpiresAt: 0,
       swimmerCap: 15,
@@ -834,6 +845,7 @@
       if(typeof s.inventory.boost !== "number") s.inventory.boost = 0;
       if(typeof s.inventory.freeCreature !== "number") s.inventory.freeCreature = 0;
       if(typeof s.boostExpiresAt !== "number") s.boostExpiresAt = 0;
+      if(typeof s.loginStreak !== "number") s.loginStreak = 0;
       return s;
     }catch(e){ return defaultState(); }
   }
@@ -2013,6 +2025,7 @@
   document.getElementById("offlineClose").addEventListener("click", () => {
     document.getElementById("offlineModal").classList.add("hidden");
     save(); render();
+    showLoginBonusIfReady();
   });
 
   function dexFactText(s){
@@ -2191,18 +2204,66 @@
     return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
   }
 
+  function parseDateString(s){
+    const parts = s.split("-").map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+
+  function daysBetweenDateStrings(a, b){
+    return Math.round((parseDateString(b) - parseDateString(a)) / 86400000);
+  }
+
+  // 7日周期。日を追うごとに豪華になり、7日目に大きなご褒美、8日目からまた1日目に戻る。
+  const LOGIN_STREAK_REWARDS = [
+    { boost: 1, freeCreature: 0 },
+    { boost: 0, freeCreature: 1 },
+    { boost: 1, freeCreature: 1 },
+    { boost: 2, freeCreature: 0 },
+    { boost: 0, freeCreature: 2 },
+    { boost: 2, freeCreature: 1 },
+    { boost: 3, freeCreature: 2, big: true },
+  ];
+
+  let pendingLoginBonusText = null;
+
   function checkDailyLogin(){
     const today = todayDateString();
     if(state.lastLoginDate === today) return;
+
+    if(state.lastLoginDate && daysBetweenDateStrings(state.lastLoginDate, today) === 1){
+      state.loginStreak += 1;
+    } else {
+      state.loginStreak = 1;
+    }
     state.lastLoginDate = today;
-    const itemId = Math.random() < 0.5 ? "boost" : "freeCreature";
-    state.inventory[itemId] += 1;
+
+    const cycleDay = ((state.loginStreak - 1) % 7);
+    const reward = LOGIN_STREAK_REWARDS[cycleDay];
+    state.inventory.boost += reward.boost;
+    state.inventory.freeCreature += reward.freeCreature;
     save();
-    const label = itemId === "boost"
-      ? "⚡ 生産量2倍ブースト（1時間）"
-      : "🎁 好きな生き物を1匹無料開放できるチケット";
-    showToast("🎉 ログインボーナス：" + label, "toastAchieve", 4000);
+
+    const parts = [];
+    if(reward.boost > 0) parts.push("⚡ 生産量2倍ブースト（1時間） ×" + reward.boost);
+    if(reward.freeCreature > 0) parts.push("🎁 好きな生き物を1匹無料開放できるチケット ×" + reward.freeCreature);
+    const streakLine = "🔥 連続ログイン " + state.loginStreak + "日目！\n\n";
+    const bigLine = reward.big ? "\n\n7日連続達成、豪華ボーナスです！このあとまた1日目からのお楽しみが続きます🎉" : "";
+    pendingLoginBonusText = streakLine + "今日のログインボーナスとして、\n" + parts.join("\n") + "\nを受け取りました！" + bigLine + "\n\n「🎁 アイテム」からいつでも使えます。";
+    showLoginBonusIfReady();
   }
+
+  function showLoginBonusIfReady(){
+    if(!pendingLoginBonusText) return;
+    if(!document.getElementById("offlineModal").classList.contains("hidden")) return;
+    document.getElementById("loginBonusText").textContent = pendingLoginBonusText;
+    document.getElementById("loginBonusModal").classList.remove("hidden");
+    pendingLoginBonusText = null;
+  }
+
+  document.getElementById("loginBonusClose").addEventListener("click", () => {
+    document.getElementById("loginBonusModal").classList.add("hidden");
+    if(!state.tutorialDone) openTutorial();
+  });
 
   function useBoostItem(){
     if(state.inventory.boost <= 0) return;
@@ -2452,7 +2513,14 @@
   checkEvolutions();
   checkDailyLogin();
   render();
-  if(!state.tutorialDone) openTutorial();
+  if(!state.tutorialDone && document.getElementById("loginBonusModal").classList.contains("hidden")) openTutorial();
+
+  document.addEventListener("visibilitychange", () => {
+    if(!document.hidden){
+      handleOfflineEarnings();
+      checkDailyLogin();
+    }
+  });
 
   let lastTick = performance.now();
   function loop(now){
