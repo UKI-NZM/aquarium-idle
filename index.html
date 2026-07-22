@@ -31,7 +31,7 @@
   }
   header h1{ font-size:16px; margin:0; font-weight:600; color:var(--sub); white-space:nowrap; }
   .headerRight{
-    display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end;
+    display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-start;
     gap:8px 16px;
   }
   .capLabel{
@@ -46,10 +46,10 @@
     border:1px solid rgba(255,255,255,.2); border-radius:999px; background:var(--panel-bg2);
     color:var(--text); padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap;
   }
-  .pearlBlock{ text-align:right; }
-  #pearlDisplay{ font-size:clamp(16px, 4vw, 22px); font-weight:700; color:var(--accent); text-align:right; white-space:nowrap; }
+  .pearlBlock{ text-align:right; margin-left:auto; }
+  #pearlDisplay{ font-size:clamp(16px, 4vw, 22px); font-weight:700; color:var(--accent); text-align:right; white-space:nowrap; font-variant-numeric: tabular-nums; }
   #pearlDisplay small{ font-size:12px; color:var(--sub); font-weight:400; margin-left:6px; white-space:nowrap; }
-  #totalEarnedDisplay{ font-size:11px; color:var(--sub); white-space:nowrap; }
+  #totalEarnedDisplay{ font-size:11px; color:var(--sub); white-space:nowrap; font-variant-numeric: tabular-nums; }
   .boostStatus{ font-size:11px; color:#ff9de2; font-weight:700; white-space:nowrap; }
   .boostStatus.hidden{ display:none; }
 
