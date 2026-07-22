@@ -417,6 +417,7 @@
   .tutorialSkipBtn{ background:transparent !important; border:1px solid rgba(255,255,255,.3); color:var(--text) !important; }
   .dexGrid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(96px,1fr)); gap:8px; margin-top:10px; }
   .dexCard{
+    position:relative;
     background:var(--panel-bg2); border-radius:10px; padding:8px; text-align:center;
     border:1px solid rgba(255,255,255,.08);
   }
@@ -425,6 +426,15 @@
   .dexCard.evolvedCard{ border-color:#ff6bd6; box-shadow:0 0 8px rgba(255,107,214,.35); }
   .dexCard .dexName{ font-size:11px; font-weight:700; margin-top:4px; }
   .dexCard .dexHint{ font-size:10px; color:var(--sub); margin-top:3px; line-height:1.3; }
+  .dexBadge{
+    position:absolute; top:3px; right:3px; font-size:9px; font-weight:700; line-height:1;
+    background:rgba(0,0,0,.55); color:var(--accent); border-radius:999px; padding:2px 4px;
+    border:1px solid rgba(255,255,255,.2);
+  }
+  .dexBadge.dexBadgeMax{
+    background:linear-gradient(135deg,#ff8fb3,#ffd76a,#6fe0ff); color:#1a1140;
+    box-shadow:0 0 6px rgba(255,255,255,.5);
+  }
   .dexToggle{
     display:flex; align-items:center; justify-content:center; gap:3px;
     font-size:10px; color:var(--sub); margin-top:5px; cursor:pointer;
@@ -432,6 +442,12 @@
   .dexToggle input{ width:12px; height:12px; cursor:pointer; accent-color: var(--accent); }
   .dexStageLabel{ font-size:12px; color:var(--accent); font-weight:700; margin:12px 0 6px; }
   .dexStageLabel:first-child{ margin-top:0; }
+  .achievePageTabs{ display:flex; gap:8px; margin-bottom:10px; }
+  .achievePageTabs .achievePageTab{
+    flex:1; margin-top:0; border:1px solid rgba(255,255,255,.2); border-radius:999px; background:var(--panel-bg2);
+    color:var(--text); padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .achievePageTabs .achievePageTab.active{ background:var(--accent); color:#3a2600; border-color:var(--accent); }
   footer{ text-align:center; color:#5c7c92; font-size:11px; padding:20px; }
 </style>
 </head>
@@ -444,6 +460,7 @@
     <button class="dexBtn" id="itemOpenBtn">🎁 アイテム</button>
     <button class="dexBtn" id="dexOpenBtn">📖 図鑑</button>
     <button class="dexBtn" id="achieveOpenBtn">🏆 実績</button>
+    <button class="dexBtn" id="changelogOpenBtn">🆕 お知らせ</button>
     <label class="capLabel" for="swimmerCapSelect">水槽の表示数
       <select id="swimmerCapSelect">
         <option value="5">控えめ（軽量）</option>
@@ -515,6 +532,11 @@
 <div class="modal hidden" id="achieveModal">
   <div class="modalBox dexBox">
     <h3>🏆 実績</h3>
+    <div class="achievePageTabs">
+      <button class="achievePageTab" id="achievePage1Btn">基本</button>
+      <button class="achievePageTab" id="achievePage2Btn">中級</button>
+      <button class="achievePageTab" id="achievePage3Btn">上級</button>
+    </div>
     <div id="achieveContent"></div>
     <button id="achieveCloseBtn">閉じる</button>
   </div>
@@ -538,6 +560,14 @@
     <h3>🎁 アイテム</h3>
     <div id="itemContent"></div>
     <button id="itemCloseBtn">閉じる</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="changelogModal">
+  <div class="modalBox dexBox">
+    <h3>🆕 お知らせ</h3>
+    <div id="changelogContent"></div>
+    <button id="changelogCloseBtn">閉じる</button>
   </div>
 </div>
 
@@ -782,6 +812,77 @@
       check: s => SPECIES.every(sp => s.speciesEvolved[sp.id]) },
   ];
 
+  // 中級・上級実績。基本実績（ACHIEVEMENTS）を全部解放しなくても挑戦できる。
+  // 報酬はパールではなく「きれいな真珠」を直接付与する（終盤は生のパール報酬が意味を持たなくなるため）。
+  // 累計パールの実績は、基本実績コンプリート時点で既に超えてしまう1兆・1京ではなく、
+  // 新しく追加した垓以上の桁を対象にしている。
+  function totalOwnedAllSpecies(s){
+    return Object.values(s.owned).reduce((sum, n) => sum + n, 0);
+  }
+
+  function totalOwnedInStage(s, stageId){
+    return speciesInStage(stageId).reduce((sum, sp) => sum + s.owned[sp.id], 0);
+  }
+
+  const ACHIEVEMENTS_MID = [
+    { id:"pearl_collector_10", emoji:"🦪", name:"真珠コレクター", desc:"きれいな真珠を10個集める", rewardFinePearls:5,
+      check: s => s.finePearls >= 10 },
+    { id:"century_species", emoji:"💯", name:"百匹の群れ", desc:"いずれかの生き物を100匹飼育する", rewardFinePearls:5,
+      check: s => Object.values(s.owned).some(n => n >= 100) },
+    { id:"half_evolved", emoji:"💫", name:"進化の道半ば", desc:"生き物を18種類（半分）進化させる", rewardFinePearls:8,
+      check: s => SPECIES.filter(sp => s.speciesEvolved[sp.id]).length >= 18 },
+    { id:"gai_earned", emoji:"🔷", name:"垓の彼方へ", desc:"累計1垓パール稼ぐ", rewardFinePearls:6,
+      check: s => s.totalEarned >= 1e20 },
+    { id:"combined_3000", emoji:"🐟", name:"水槽の賑わい", desc:"生き物を合計3000匹飼育する", rewardFinePearls:6,
+      check: s => totalOwnedAllSpecies(s) >= 3000 },
+    { id:"river_1000", emoji:"🏞️", name:"川の賑わい", desc:"川の生き物を合計1000匹飼育する", rewardFinePearls:5,
+      check: s => totalOwnedInStage(s, "river") >= 1000 },
+    { id:"lake_1000", emoji:"🏔️", name:"湖の賑わい", desc:"湖の生き物を合計1000匹飼育する", rewardFinePearls:6,
+      check: s => totalOwnedInStage(s, "lake") >= 1000 },
+    { id:"shi_earned", emoji:"🔶", name:"秭の高みへ", desc:"累計1秭パール稼ぐ", rewardFinePearls:8,
+      check: s => s.totalEarned >= 1e24 },
+    { id:"jou_earned", emoji:"🔸", name:"穣という数", desc:"累計1穣パール稼ぐ", rewardFinePearls:12,
+      check: s => s.totalEarned >= 1e28 },
+  ];
+
+  const ACHIEVEMENTS_ADV = [
+    { id:"pearl_collector_50", emoji:"🦪", name:"真珠マニア", desc:"きれいな真珠を50個集める", rewardFinePearls:15,
+      check: s => s.finePearls >= 50 },
+    { id:"pearl_collector_100", emoji:"🦪", name:"真珠の海", desc:"きれいな真珠を100個集める", rewardFinePearls:30,
+      check: s => s.finePearls >= 100 },
+    { id:"dex_master", emoji:"📖", name:"図鑑マスター", desc:"全36種類を100匹以上飼育する", rewardFinePearls:30,
+      check: s => SPECIES.every(sp => s.owned[sp.id] >= 100) },
+    { id:"millennium_species", emoji:"🐋", name:"千匹の楽園", desc:"いずれかの生き物を1000匹飼育する", rewardFinePearls:50,
+      check: s => Object.values(s.owned).some(n => n >= 1000) },
+    { id:"combined_10000", emoji:"🌊", name:"あふれる生命", desc:"生き物を合計10000匹飼育する", rewardFinePearls:20,
+      check: s => totalOwnedAllSpecies(s) >= 10000 },
+    { id:"ocean_2000", emoji:"🐠", name:"海の賑わい", desc:"海の生き物を合計2000匹飼育する", rewardFinePearls:18,
+      check: s => totalOwnedInStage(s, "ocean") >= 2000 },
+    { id:"reef_2000", emoji:"🎐", name:"珊瑚礁の賑わい", desc:"珊瑚礁の生き物を合計2000匹飼育する", rewardFinePearls:25,
+      check: s => totalOwnedInStage(s, "reef") >= 2000 },
+    { id:"deepsea_2000", emoji:"🔱", name:"深海の賑わい", desc:"深海の生き物を合計2000匹飼育する", rewardFinePearls:35,
+      check: s => totalOwnedInStage(s, "deepsea") >= 2000 },
+    { id:"kou_earned", emoji:"🌀", name:"溝を越えて", desc:"累計1溝パール稼ぐ", rewardFinePearls:20,
+      check: s => s.totalEarned >= 1e32 },
+    { id:"kan_earned", emoji:"💧", name:"澗の深淵", desc:"累計1澗パール稼ぐ", rewardFinePearls:28,
+      check: s => s.totalEarned >= 1e36 },
+    { id:"sei_earned", emoji:"⚖️", name:"正真正銘の稼ぎ手", desc:"累計1正パール稼ぐ", rewardFinePearls:40,
+      check: s => s.totalEarned >= 1e40 },
+    { id:"sai_earned", emoji:"🚛", name:"載せきれないほどに", desc:"累計1載パール稼ぐ", rewardFinePearls:55,
+      check: s => s.totalEarned >= 1e44 },
+    { id:"goku_earned", emoji:"👑", name:"極みへ到達", desc:"累計1極パール稼ぐ", rewardFinePearls:75,
+      check: s => s.totalEarned >= 1e48 },
+  ];
+
+  // 新しい追加が来るたびに、配列の先頭にどんどん足していく（新しいものが上に出る）。
+  const CHANGELOG = [
+    { emoji:"💰", title:"生き物の購入価格に上限を設定", desc:"1.15倍で増え続ける値段が、1000極でついに頭打ちになりました。大量に飼育するほど、現実的に届く数が増えます。" },
+    { emoji:"🔢", title:"パールの単位を拡張", desc:"京の上に、垓・秭・穣・溝・澗・正・載・極を追加しました。終盤の数字がさらに先まで表示できます。" },
+    { emoji:"📈", title:"100匹以上でも生産量が伸びるように", desc:"図鑑バッジのレベルに応じて生産量が上昇します（100匹ごとに+15%、1000匹で最大+150%）。" },
+    { emoji:"📖", title:"図鑑にバッジ機能を追加", desc:"生き物を100匹ごとに飼育すると、図鑑のカードにバッジが付きます。1000匹で最高レベルの特別なバッジに。" },
+    { emoji:"🏆", title:"実績に「中級」「上級」を追加", desc:"きれいな真珠を報酬にした、より難しい実績が増えました。「実績」画面のタブから切り替えられます。" },
+  ];
+
   function defaultState(){
     const owned = {};
     const speciesUpgraded = {};
@@ -808,6 +909,7 @@
       tutorialDone: false,
       lastLoginDate: null,
       loginStreak: 0,
+      changelogSeenCount: CHANGELOG.length,
       inventory: { boost: 0, freeCreature: 0 },
       boostExpiresAt: 0,
       swimmerCap: 15,
@@ -846,6 +948,7 @@
       if(typeof s.inventory.freeCreature !== "number") s.inventory.freeCreature = 0;
       if(typeof s.boostExpiresAt !== "number") s.boostExpiresAt = 0;
       if(typeof s.loginStreak !== "number") s.loginStreak = 0;
+      if(!("changelogSeenCount" in saved)) s.changelogSeenCount = 0;
       return s;
     }catch(e){ return defaultState(); }
   }
@@ -855,21 +958,39 @@
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
   }
 
+  // 1.15倍の複利増加はそのままに、1000極（1000×10^48）を超えたら頭打ちにする。
+  // これが無いと、1匹あたりの単価が低い生き物でも1000匹目には到達不能な金額になってしまう。
+  const MAX_SPECIES_COST = 1000 * 1e48;
+
   function costFor(species){
-    return Math.ceil(species.baseCost * Math.pow(GROWTH, state.owned[species.id]));
+    const raw = species.baseCost * Math.pow(GROWTH, state.owned[species.id]);
+    return Math.ceil(Math.min(raw, MAX_SPECIES_COST));
+  }
+
+  const DEX_BADGE_STEP = 100;
+  const DEX_BADGE_MAX_LEVEL = 10;
+  const CENTURY_MULT_PER_LEVEL = 0.15;
+
+  function dexBadgeLevel(owned){
+    return Math.min(DEX_BADGE_MAX_LEVEL, Math.floor(owned / DEX_BADGE_STEP));
+  }
+
+  // 100匹ごとにバッジのレベルが上がり、生産量にも上乗せがかかる（最大1000匹で+150%）。
+  function centuryMultiplier(owned){
+    return 1 + dexBadgeLevel(owned) * CENTURY_MULT_PER_LEVEL;
   }
 
   function prodFor(species){
     const owned = state.owned[species.id];
     const upgradeMult = state.speciesUpgraded[species.id] ? 2 : 1;
     const evolveMult = state.speciesEvolved[species.id] ? 1.5 : 1;
-    return species.baseProd * owned * upgradeMult * evolveMult;
+    return species.baseProd * owned * upgradeMult * evolveMult * centuryMultiplier(owned);
   }
 
   function perUnitProd(species){
     const upgradeMult = state.speciesUpgraded[species.id] ? 2 : 1;
     const evolveMult = state.speciesEvolved[species.id] ? 1.5 : 1;
-    return species.baseProd * upgradeMult * evolveMult;
+    return species.baseProd * upgradeMult * evolveMult * centuryMultiplier(state.owned[species.id]);
   }
 
   function globalMultiplier(){
@@ -909,20 +1030,39 @@
     return numStr.replace(/0+$/, "").replace(/\.$/, "");
   }
 
+  const NUMBER_UNITS = [
+    { value: 1e48, suffix: "極", decimals: 4 },
+    { value: 1e44, suffix: "載", decimals: 4 },
+    { value: 1e40, suffix: "正", decimals: 4 },
+    { value: 1e36, suffix: "澗", decimals: 4 },
+    { value: 1e32, suffix: "溝", decimals: 4 },
+    { value: 1e28, suffix: "穣", decimals: 4 },
+    { value: 1e24, suffix: "秭", decimals: 4 },
+    { value: 1e20, suffix: "垓", decimals: 4 },
+    { value: 1e16, suffix: "京", decimals: 4 },
+    { value: 1e12, suffix: "兆", decimals: 4 },
+    { value: 1e8,  suffix: "億", decimals: 4 },
+    { value: 1e4,  suffix: "万", decimals: 2 },
+  ];
+
+  // 極端に大きい数（1e19を10乗していく真珠コストなど）は掛け算の時点で
+  // 浮動小数点の誤差が乗るため、桁換算する前に有効数字を丸めてノイズを消す。
+  function roundRatio(ratio){
+    return Number(ratio.toPrecision(12));
+  }
+
   function fmt(n){
     n = Math.floor(n);
-    if(n >= 10000000000000000) return trimTrailingZeros((n/10000000000000000).toFixed(4)) + "京";
-    if(n >= 1000000000000) return trimTrailingZeros((n/1000000000000).toFixed(4)) + "兆";
-    if(n >= 100000000) return trimTrailingZeros((n/100000000).toFixed(4)) + "億";
-    if(n >= 10000) return trimTrailingZeros((n/10000).toFixed(2)) + "万";
+    for(const u of NUMBER_UNITS){
+      if(n >= u.value) return trimTrailingZeros(roundRatio(n/u.value).toFixed(u.decimals)) + u.suffix;
+    }
     return n.toLocaleString();
   }
 
   function fmtRate(n){
-    if(n >= 10000000000000000) return trimTrailingZeros((n/10000000000000000).toFixed(4)) + "京";
-    if(n >= 1000000000000) return trimTrailingZeros((n/1000000000000).toFixed(4)) + "兆";
-    if(n >= 100000000) return trimTrailingZeros((n/100000000).toFixed(4)) + "億";
-    if(n >= 10000) return trimTrailingZeros((n/10000).toFixed(2)) + "万";
+    for(const u of NUMBER_UNITS){
+      if(n >= u.value) return trimTrailingZeros(roundRatio(n/u.value).toFixed(u.decimals)) + u.suffix;
+    }
     if(n < 10) return trimTrailingZeros(n.toFixed(2));
     if(n < 1000) return trimTrailingZeros(n.toFixed(1));
     return Math.floor(n).toLocaleString();
@@ -986,7 +1126,8 @@
   }
 
   function showAchieveToast(a){
-    showToast("🏆 実績解放：" + a.emoji + " " + a.name + "（+" + fmt(a.reward) + "パール）", "toastAchieve", 3500);
+    const rewardText = a.rewardFinePearls ? ("+" + a.rewardFinePearls + " 真珠") : ("+" + fmt(a.reward) + "パール");
+    showToast("🏆 実績解放：" + a.emoji + " " + a.name + "（" + rewardText + "）", "toastAchieve", 3500);
   }
 
   function checkEvolutions(){
@@ -1009,16 +1150,42 @@
         save();
       }
     });
+    if(allAchievementsUnlocked()){
+      ACHIEVEMENTS_MID.forEach(a => {
+        if(!state.achievementsUnlocked[a.id] && a.check(state)){
+          state.achievementsUnlocked[a.id] = true;
+          state.finePearls += a.rewardFinePearls;
+          showAchieveToast(a);
+          save();
+        }
+      });
+    }
+    if(allMidAchievementsUnlocked()){
+      ACHIEVEMENTS_ADV.forEach(a => {
+        if(!state.achievementsUnlocked[a.id] && a.check(state)){
+          state.achievementsUnlocked[a.id] = true;
+          state.finePearls += a.rewardFinePearls;
+          showAchieveToast(a);
+          save();
+        }
+      });
+    }
   }
 
   const FINE_PEARL_BASE_COST = 1e19;
+  // 生き物の購入価格と同じく1000極で頭打ちにする（無限に買えるという仕様自体は変えない）。
+  const FINE_PEARL_MAX_COST = MAX_SPECIES_COST;
 
   function allAchievementsUnlocked(){
     return ACHIEVEMENTS.every(a => state.achievementsUnlocked[a.id]);
   }
 
+  function allMidAchievementsUnlocked(){
+    return ACHIEVEMENTS_MID.every(a => state.achievementsUnlocked[a.id]);
+  }
+
   function finePearlCost(){
-    return FINE_PEARL_BASE_COST * Math.pow(10, state.finePearls);
+    return Math.min(FINE_PEARL_BASE_COST * Math.pow(10, state.finePearls), FINE_PEARL_MAX_COST);
   }
 
   function buyFinePearl(){
@@ -1934,6 +2101,8 @@
     }
     const itemCount = state.inventory.boost + state.inventory.freeCreature;
     document.getElementById("itemOpenBtn").textContent = "🎁 アイテム" + (itemCount > 0 ? "（" + itemCount + "）" : "");
+    const unseenChangelog = unseenChangelogCount();
+    document.getElementById("changelogOpenBtn").textContent = "🆕 お知らせ" + (unseenChangelog > 0 ? "（" + unseenChangelog + "）" : "");
   }
 
   function spawnFloatText(x, y, text){
@@ -2026,6 +2195,7 @@
     document.getElementById("offlineModal").classList.add("hidden");
     save(); render();
     showLoginBonusIfReady();
+    showChangelogIfReady();
   });
 
   function dexFactText(s){
@@ -2050,6 +2220,13 @@
     return fact || hint;
   }
 
+  function dexBadgeHtml(owned){
+    const level = dexBadgeLevel(owned);
+    if(level <= 0) return "";
+    const maxed = level >= DEX_BADGE_MAX_LEVEL;
+    return '<div class="dexBadge' + (maxed ? " dexBadgeMax" : "") + '">' + (maxed ? "💠" : "🏅") + level + '</div>';
+  }
+
   function renderDexContent(){
     const el = document.getElementById("dexContent");
     el.innerHTML = "";
@@ -2067,6 +2244,7 @@
         const card = document.createElement("div");
         card.className = "dexCard" + (owned <= 0 ? " locked" : "") + (evolved ? " evolvedCard" : "");
         card.innerHTML =
+          dexBadgeHtml(owned) +
           '<div class="dexEmoji">' + (owned > 0 ? emojiIcon(s.emoji, 26, s.tint) + (evolved ? "✨" : "") : "❔") + '</div>' +
           '<div class="dexName">' + (owned > 0 ? s.name : "？？？") + '</div>' +
           '<div class="dexHint">' + dexInfoHtml(s) + '</div>' +
@@ -2092,19 +2270,27 @@
 
   const finePearlRef = {};
   let lastAchieveSignature = null;
+  let achievePage = 1;
 
-  function buildAchieveContentIfNeeded(){
-    const sig = ACHIEVEMENTS.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" + state.finePearls;
-    if(sig === lastAchieveSignature) return;
-    lastAchieveSignature = sig;
-    delete finePearlRef.nameEl;
-    delete finePearlRef.subEl;
-    delete finePearlRef.btn;
+  function updateAchievePageTabsUI(){
+    document.getElementById("achievePage1Btn").classList.toggle("active", achievePage === 1);
+    document.getElementById("achievePage2Btn").classList.toggle("active", achievePage === 2);
+    document.getElementById("achievePage3Btn").classList.toggle("active", achievePage === 3);
+  }
 
-    const el = document.getElementById("achieveContent");
-    const unlockedCount = ACHIEVEMENTS.filter(a => state.achievementsUnlocked[a.id]).length;
-    el.innerHTML = '<div class="dexStageLabel">' + unlockedCount + " / " + ACHIEVEMENTS.length + " 解放済み</div>";
-    ACHIEVEMENTS.forEach(a => {
+  function renderFinePearlAchieveRow(el, list, prereqMet, prereqLabel){
+    if(!prereqMet){
+      el.innerHTML =
+        '<div class="row upgradeRow locked">' +
+          '<div class="emoji">🔒</div>' +
+          '<div class="info"><div class="name">まだ挑戦できません</div>' +
+          '<div class="sub">' + prereqLabel + '</div></div>' +
+        '</div>';
+      return;
+    }
+    const unlockedCount = list.filter(a => state.achievementsUnlocked[a.id]).length;
+    el.innerHTML = '<div class="dexStageLabel">' + unlockedCount + " / " + list.length + " 解放済み</div>";
+    list.forEach(a => {
       const unlocked = !!state.achievementsUnlocked[a.id];
       const row = document.createElement("div");
       row.className = "row" + (unlocked ? "" : " upgradeRow locked");
@@ -2112,32 +2298,73 @@
         '<div class="emoji">' + (unlocked ? a.emoji : "🔒") + '</div>' +
         '<div class="info">' +
           '<div class="name">' + a.name + '</div>' +
-          '<div class="sub">' + a.desc + '（報酬 ' + fmt(a.reward) + ' パール）</div>' +
+          '<div class="sub">' + a.desc + '（報酬 真珠+' + a.rewardFinePearls + '）</div>' +
         '</div>';
       el.appendChild(row);
     });
+  }
 
-    if(allAchievementsUnlocked()){
-      const label = document.createElement("div");
-      label.className = "dexStageLabel";
-      label.textContent = "🦪 きれいな真珠";
-      el.appendChild(label);
+  function buildAchieveContentIfNeeded(){
+    const sig = achievePage + ":" +
+      ACHIEVEMENTS.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" +
+      ACHIEVEMENTS_MID.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" +
+      ACHIEVEMENTS_ADV.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" +
+      state.finePearls;
+    if(sig === lastAchieveSignature) return;
+    lastAchieveSignature = sig;
+    delete finePearlRef.nameEl;
+    delete finePearlRef.subEl;
+    delete finePearlRef.btn;
 
-      const row = document.createElement("div");
-      row.className = "row";
-      row.innerHTML =
-        '<div class="emoji">🦪</div>' +
-        '<div class="info"><div class="name"></div>' +
-        '<div class="sub"></div></div>' +
-        '<button id="buyFinePearlBtn">買う</button>';
-      const nameEl = row.querySelector(".name");
-      const subEl = row.querySelector(".sub");
-      const btn = row.querySelector("button");
-      btn.addEventListener("click", () => buyFinePearl());
-      el.appendChild(row);
-      finePearlRef.nameEl = nameEl;
-      finePearlRef.subEl = subEl;
-      finePearlRef.btn = btn;
+    const el = document.getElementById("achieveContent");
+    el.innerHTML = "";
+
+    if(achievePage === 1){
+      const unlockedCount = ACHIEVEMENTS.filter(a => state.achievementsUnlocked[a.id]).length;
+      el.innerHTML = '<div class="dexStageLabel">' + unlockedCount + " / " + ACHIEVEMENTS.length + " 解放済み</div>";
+      ACHIEVEMENTS.forEach(a => {
+        const unlocked = !!state.achievementsUnlocked[a.id];
+        const row = document.createElement("div");
+        row.className = "row" + (unlocked ? "" : " upgradeRow locked");
+        row.innerHTML =
+          '<div class="emoji">' + (unlocked ? a.emoji : "🔒") + '</div>' +
+          '<div class="info">' +
+            '<div class="name">' + a.name + '</div>' +
+            '<div class="sub">' + a.desc + '（報酬 ' + fmt(a.reward) + ' パール）</div>' +
+          '</div>';
+        el.appendChild(row);
+      });
+
+      if(allAchievementsUnlocked()){
+        const label = document.createElement("div");
+        label.className = "dexStageLabel";
+        label.textContent = "🦪 きれいな真珠";
+        el.appendChild(label);
+
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML =
+          '<div class="emoji">🦪</div>' +
+          '<div class="info"><div class="name"></div>' +
+          '<div class="sub"></div></div>' +
+          '<button id="buyFinePearlBtn">買う</button>';
+        const nameEl = row.querySelector(".name");
+        const subEl = row.querySelector(".sub");
+        const btn = row.querySelector("button");
+        btn.addEventListener("click", () => buyFinePearl());
+        el.appendChild(row);
+        finePearlRef.nameEl = nameEl;
+        finePearlRef.subEl = subEl;
+        finePearlRef.btn = btn;
+      }
+    } else if(achievePage === 2){
+      const basicCount = ACHIEVEMENTS.filter(a => state.achievementsUnlocked[a.id]).length;
+      renderFinePearlAchieveRow(el, ACHIEVEMENTS_MID, allAchievementsUnlocked(),
+        "基本の実績をすべて解放すると挑戦できるようになります（現在 " + basicCount + "/" + ACHIEVEMENTS.length + "）");
+    } else {
+      const midCount = ACHIEVEMENTS_MID.filter(a => state.achievementsUnlocked[a.id]).length;
+      renderFinePearlAchieveRow(el, ACHIEVEMENTS_ADV, allMidAchievementsUnlocked(),
+        "中級の実績をすべて解放すると挑戦できるようになります（現在 " + midCount + "/" + ACHIEVEMENTS_MID.length + "）");
     }
   }
 
@@ -2152,8 +2379,24 @@
   }
 
   document.getElementById("achieveOpenBtn").addEventListener("click", () => {
+    updateAchievePageTabsUI();
     renderAchieveContent();
     document.getElementById("achieveModal").classList.remove("hidden");
+  });
+  document.getElementById("achievePage1Btn").addEventListener("click", () => {
+    achievePage = 1;
+    updateAchievePageTabsUI();
+    renderAchieveContent();
+  });
+  document.getElementById("achievePage2Btn").addEventListener("click", () => {
+    achievePage = 2;
+    updateAchievePageTabsUI();
+    renderAchieveContent();
+  });
+  document.getElementById("achievePage3Btn").addEventListener("click", () => {
+    achievePage = 3;
+    updateAchievePageTabsUI();
+    renderAchieveContent();
   });
   document.getElementById("achieveCloseBtn").addEventListener("click", () => {
     document.getElementById("achieveModal").classList.add("hidden");
@@ -2263,7 +2506,20 @@
   document.getElementById("loginBonusClose").addEventListener("click", () => {
     document.getElementById("loginBonusModal").classList.add("hidden");
     if(!state.tutorialDone) openTutorial();
+    showChangelogIfReady();
   });
+
+  function showChangelogIfReady(){
+    if(unseenChangelogCount() <= 0) return;
+    if(!document.getElementById("offlineModal").classList.contains("hidden")) return;
+    if(!document.getElementById("loginBonusModal").classList.contains("hidden")) return;
+    if(!document.getElementById("tutorialModal").classList.contains("hidden")) return;
+    renderChangelogContent();
+    document.getElementById("changelogModal").classList.remove("hidden");
+    state.changelogSeenCount = CHANGELOG.length;
+    save();
+    render();
+  }
 
   function useBoostItem(){
     if(state.inventory.boost <= 0) return;
@@ -2311,6 +2567,37 @@
   document.getElementById("itemOpenBtn").addEventListener("click", () => openItemModal());
   document.getElementById("itemCloseBtn").addEventListener("click", () => {
     document.getElementById("itemModal").classList.add("hidden");
+  });
+
+  function unseenChangelogCount(){
+    return Math.max(0, CHANGELOG.length - state.changelogSeenCount);
+  }
+
+  function renderChangelogContent(){
+    const el = document.getElementById("changelogContent");
+    el.innerHTML = "";
+    CHANGELOG.forEach(c => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML =
+        '<div class="emoji">' + c.emoji + '</div>' +
+        '<div class="info">' +
+          '<div class="name">' + c.title + '</div>' +
+          '<div class="sub">' + c.desc + '</div>' +
+        '</div>';
+      el.appendChild(row);
+    });
+  }
+
+  document.getElementById("changelogOpenBtn").addEventListener("click", () => {
+    renderChangelogContent();
+    document.getElementById("changelogModal").classList.remove("hidden");
+    state.changelogSeenCount = CHANGELOG.length;
+    save();
+    render();
+  });
+  document.getElementById("changelogCloseBtn").addEventListener("click", () => {
+    document.getElementById("changelogModal").classList.add("hidden");
   });
 
   let pendingFreeCreatureId = null;
@@ -2514,6 +2801,7 @@
   checkDailyLogin();
   render();
   if(!state.tutorialDone && document.getElementById("loginBonusModal").classList.contains("hidden")) openTutorial();
+  showChangelogIfReady();
 
   document.addEventListener("visibilitychange", () => {
     if(!document.hidden){
