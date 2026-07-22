@@ -536,6 +536,7 @@
       <button class="achievePageTab" id="achievePage1Btn">基本</button>
       <button class="achievePageTab" id="achievePage2Btn">中級</button>
       <button class="achievePageTab" id="achievePage3Btn">上級</button>
+      <button class="achievePageTab" id="achievePage4Btn">特級</button>
     </div>
     <div id="achieveContent"></div>
     <button id="achieveCloseBtn">閉じる</button>
@@ -841,8 +842,6 @@
       check: s => totalOwnedInStage(s, "lake") >= 1000 },
     { id:"shi_earned", emoji:"🔶", name:"秭の高みへ", desc:"累計1秭パール稼ぐ", rewardFinePearls:8,
       check: s => s.totalEarned >= 1e24 },
-    { id:"jou_earned", emoji:"🔸", name:"穣という数", desc:"累計1穣パール稼ぐ", rewardFinePearls:12,
-      check: s => s.totalEarned >= 1e28 },
   ];
 
   const ACHIEVEMENTS_ADV = [
@@ -862,6 +861,13 @@
       check: s => totalOwnedInStage(s, "reef") >= 2000 },
     { id:"deepsea_2000", emoji:"🔱", name:"深海の賑わい", desc:"深海の生き物を合計2000匹飼育する", rewardFinePearls:35,
       check: s => totalOwnedInStage(s, "deepsea") >= 2000 },
+  ];
+
+  // 特級：上級を全部解放した先にある、単位系の実績専用の最上位タブ。
+  // 現時点では難易度の対策（配布量の見直し等）は未着手で、桁のハードルは意図的に高いまま据え置いている。
+  const ACHIEVEMENTS_SPECIAL = [
+    { id:"jou_earned", emoji:"🔸", name:"穣という数", desc:"累計1穣パール稼ぐ", rewardFinePearls:12,
+      check: s => s.totalEarned >= 1e28 },
     { id:"kou_earned", emoji:"🌀", name:"溝を越えて", desc:"累計1溝パール稼ぐ", rewardFinePearls:20,
       check: s => s.totalEarned >= 1e32 },
     { id:"kan_earned", emoji:"💧", name:"澗の深淵", desc:"累計1澗パール稼ぐ", rewardFinePearls:28,
@@ -876,7 +882,10 @@
 
   // 新しい追加が来るたびに、配列の先頭にどんどん足していく（新しいものが上に出る）。
   const CHANGELOG = [
-    { emoji:"💰", title:"生き物の購入価格に上限を設定", desc:"1.15倍で増え続ける値段が、1000極でついに頭打ちになりました。大量に飼育するほど、現実的に届く数が増えます。" },
+    { emoji:"🏆", title:"実績に「特級」を追加", desc:"上級をすべて解放すると挑戦できる、最上位の実績が6種類増えました。累計パールの大きな桁（穣・溝・澗・正・載・極）に挑戦できます。" },
+    { emoji:"⚖️", title:"実績のバランスを見直し", desc:"中級・上級の実績を整理しました。新しい実績（進化の道半ば、川・湖・海・珊瑚礁・深海の賑わい、水槽の賑わい、あふれる生命など）も増え、達成しやすさに合わせて配置し直しています。" },
+    { emoji:"💰", title:"生き物の購入価格の上限を引き下げ", desc:"「千匹の楽園」実績が現実的な時間で届くよう、生き物の購入価格の頭打ちラインを引き下げました（真珠の価格上限は変更していません）。" },
+    { emoji:"💰", title:"生き物の購入価格に上限を設定", desc:"1.15倍で増え続ける値段が、ついに頭打ちになりました。大量に飼育するほど、現実的に届く数が増えます。" },
     { emoji:"🔢", title:"パールの単位を拡張", desc:"京の上に、垓・秭・穣・溝・澗・正・載・極を追加しました。終盤の数字がさらに先まで表示できます。" },
     { emoji:"📈", title:"100匹以上でも生産量が伸びるように", desc:"図鑑バッジのレベルに応じて生産量が上昇します（100匹ごとに+15%、1000匹で最大+150%）。" },
     { emoji:"📖", title:"図鑑にバッジ機能を追加", desc:"生き物を100匹ごとに飼育すると、図鑑のカードにバッジが付きます。1000匹で最高レベルの特別なバッジに。" },
@@ -958,9 +967,11 @@
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
   }
 
-  // 1.15倍の複利増加はそのままに、1000極（1000×10^48）を超えたら頭打ちにする。
+  // 1.15倍の複利増加はそのままに、上限を超えたら頭打ちにする。
   // これが無いと、1匹あたりの単価が低い生き物でも1000匹目には到達不能な金額になってしまう。
-  const MAX_SPECIES_COST = 1000 * 1e48;
+  // 上限は「千匹の楽園」実績が確立した上級経済からの本気の作業でおよそ1ヶ月で届く水準に調整
+  // （真珠のコスト上限とはあえて切り離している。真珠は無限課金先として別の上限を持つ）。
+  const MAX_SPECIES_COST = 2.7e22;
 
   function costFor(species){
     const raw = species.baseCost * Math.pow(GROWTH, state.owned[species.id]);
@@ -1170,11 +1181,22 @@
         }
       });
     }
+    if(allAdvAchievementsUnlocked()){
+      ACHIEVEMENTS_SPECIAL.forEach(a => {
+        if(!state.achievementsUnlocked[a.id] && a.check(state)){
+          state.achievementsUnlocked[a.id] = true;
+          state.finePearls += a.rewardFinePearls;
+          showAchieveToast(a);
+          save();
+        }
+      });
+    }
   }
 
   const FINE_PEARL_BASE_COST = 1e19;
-  // 生き物の購入価格と同じく1000極で頭打ちにする（無限に買えるという仕様自体は変えない）。
-  const FINE_PEARL_MAX_COST = MAX_SPECIES_COST;
+  // 生き物の購入価格とは別に、1000極で頭打ちにする（無限に買えるという仕様自体は変えない）。
+  // 生き物側の上限を下げても、真珠は終盤の無限課金先という役割を保つため、あえて固定値のまま分離している。
+  const FINE_PEARL_MAX_COST = 1000 * 1e48;
 
   function allAchievementsUnlocked(){
     return ACHIEVEMENTS.every(a => state.achievementsUnlocked[a.id]);
@@ -1182,6 +1204,10 @@
 
   function allMidAchievementsUnlocked(){
     return ACHIEVEMENTS_MID.every(a => state.achievementsUnlocked[a.id]);
+  }
+
+  function allAdvAchievementsUnlocked(){
+    return ACHIEVEMENTS_ADV.every(a => state.achievementsUnlocked[a.id]);
   }
 
   function finePearlCost(){
@@ -2276,6 +2302,7 @@
     document.getElementById("achievePage1Btn").classList.toggle("active", achievePage === 1);
     document.getElementById("achievePage2Btn").classList.toggle("active", achievePage === 2);
     document.getElementById("achievePage3Btn").classList.toggle("active", achievePage === 3);
+    document.getElementById("achievePage4Btn").classList.toggle("active", achievePage === 4);
   }
 
   function renderFinePearlAchieveRow(el, list, prereqMet, prereqLabel){
@@ -2309,6 +2336,7 @@
       ACHIEVEMENTS.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" +
       ACHIEVEMENTS_MID.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" +
       ACHIEVEMENTS_ADV.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" +
+      ACHIEVEMENTS_SPECIAL.map(a => state.achievementsUnlocked[a.id] ? 1 : 0).join(",") + ":" +
       state.finePearls;
     if(sig === lastAchieveSignature) return;
     lastAchieveSignature = sig;
@@ -2361,10 +2389,14 @@
       const basicCount = ACHIEVEMENTS.filter(a => state.achievementsUnlocked[a.id]).length;
       renderFinePearlAchieveRow(el, ACHIEVEMENTS_MID, allAchievementsUnlocked(),
         "基本の実績をすべて解放すると挑戦できるようになります（現在 " + basicCount + "/" + ACHIEVEMENTS.length + "）");
-    } else {
+    } else if(achievePage === 3){
       const midCount = ACHIEVEMENTS_MID.filter(a => state.achievementsUnlocked[a.id]).length;
       renderFinePearlAchieveRow(el, ACHIEVEMENTS_ADV, allMidAchievementsUnlocked(),
         "中級の実績をすべて解放すると挑戦できるようになります（現在 " + midCount + "/" + ACHIEVEMENTS_MID.length + "）");
+    } else {
+      const advCount = ACHIEVEMENTS_ADV.filter(a => state.achievementsUnlocked[a.id]).length;
+      renderFinePearlAchieveRow(el, ACHIEVEMENTS_SPECIAL, allAdvAchievementsUnlocked(),
+        "上級の実績をすべて解放すると挑戦できるようになります（現在 " + advCount + "/" + ACHIEVEMENTS_ADV.length + "）");
     }
   }
 
@@ -2395,6 +2427,11 @@
   });
   document.getElementById("achievePage3Btn").addEventListener("click", () => {
     achievePage = 3;
+    updateAchievePageTabsUI();
+    renderAchieveContent();
+  });
+  document.getElementById("achievePage4Btn").addEventListener("click", () => {
+    achievePage = 4;
     updateAchievePageTabsUI();
     renderAchieveContent();
   });
