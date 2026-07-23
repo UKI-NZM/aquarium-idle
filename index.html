@@ -882,6 +882,7 @@
 
   // 新しい追加が来るたびに、配列の先頭にどんどん足していく（新しいものが上に出る）。
   const CHANGELOG = [
+    { emoji:"🚀", title:"100匹以上の生産倍率を強化", desc:"生き物の生産倍率カーブを見直しました。メダカを基準に、1000匹でシーラカンスに迫る生産力になるよう再設計し、全種目に共通で適用しています（種目ごとの強さの違いはそのまま残ります）。" },
     { emoji:"🏆", title:"実績に「特級」を追加", desc:"上級をすべて解放すると挑戦できる、最上位の実績が6種類増えました。累計パールの大きな桁（穣・溝・澗・正・載・極）に挑戦できます。" },
     { emoji:"⚖️", title:"実績のバランスを見直し", desc:"中級・上級の実績を整理しました。新しい実績（進化の道半ば、川・湖・海・珊瑚礁・深海の賑わい、水槽の賑わい、あふれる生命など）も増え、達成しやすさに合わせて配置し直しています。" },
     { emoji:"💰", title:"生き物の購入価格の上限を引き下げ", desc:"「千匹の楽園」実績が現実的な時間で届くよう、生き物の購入価格の頭打ちラインを引き下げました（真珠の価格上限は変更していません）。" },
@@ -980,15 +981,31 @@
 
   const DEX_BADGE_STEP = 100;
   const DEX_BADGE_MAX_LEVEL = 10;
-  const CENTURY_MULT_PER_LEVEL = 0.15;
 
   function dexBadgeLevel(owned){
     return Math.min(DEX_BADGE_MAX_LEVEL, Math.floor(owned / DEX_BADGE_STEP));
   }
 
-  // 100匹ごとにバッジのレベルが上がり、生産量にも上乗せがかかる（最大1000匹で+150%）。
+  // 100匹ごとにバッジのレベルが上がり、生産量にも上乗せがかかる。
+  // 101匹目以降は100匹の区切りごとに単価そのものが跳ね上がる方式（上限1000匹＝バッジレベル10）。
+  // 倍率カーブはメダカを基準に1本だけ作る（メダカが1000匹でシーラカンスの半分の単価になるように逆算）。
+  // 全種目にこの同じ倍率カーブを適用するので、種目間の元々の強さの差はそのまま維持される
+  // （メダカを基準にした「底上げ」であって、全種を同じ到達点に均すものではない）。
+  function centuryTargetProd(){
+    const coelacanth = SPECIES.find(sp => sp.id === "coelacanth");
+    return coelacanth.baseProd / 2;
+  }
+
+  function centuryBatchGrowth(){
+    const medaka = SPECIES.find(sp => sp.id === "medaka");
+    const target = centuryTargetProd();
+    return Math.pow(target / medaka.baseProd, 1 / DEX_BADGE_MAX_LEVEL);
+  }
+
   function centuryMultiplier(owned){
-    return 1 + dexBadgeLevel(owned) * CENTURY_MULT_PER_LEVEL;
+    const level = dexBadgeLevel(owned);
+    if(level <= 0) return 1;
+    return Math.pow(centuryBatchGrowth(), level);
   }
 
   function prodFor(species){
@@ -2838,6 +2855,7 @@
   checkDailyLogin();
   render();
   if(!state.tutorialDone && document.getElementById("loginBonusModal").classList.contains("hidden")) openTutorial();
+
   showChangelogIfReady();
 
   document.addEventListener("visibilitychange", () => {
