@@ -912,6 +912,7 @@
       roomRandomGlow: false,
       achievementsUnlocked: {},
       finePearls: 0,
+      finePearlsPurchased: 0,
       roomBackgroundsOwned: { "default": true },
       roomBackground: "default",
       decorOwned: {},
@@ -959,6 +960,7 @@
       if(typeof s.boostExpiresAt !== "number") s.boostExpiresAt = 0;
       if(typeof s.loginStreak !== "number") s.loginStreak = 0;
       if(!("changelogSeenCount" in saved)) s.changelogSeenCount = 0;
+      if(typeof s.finePearlsPurchased !== "number") s.finePearlsPurchased = 0;
       return s;
     }catch(e){ return defaultState(); }
   }
@@ -1227,8 +1229,9 @@
     return ACHIEVEMENTS_ADV.every(a => state.achievementsUnlocked[a.id]);
   }
 
+  // 値段の複利は「実際に買った回数」だけで上がる。実績報酬でもらった分はカウントしない。
   function finePearlCost(){
-    return Math.min(FINE_PEARL_BASE_COST * Math.pow(10, state.finePearls), FINE_PEARL_MAX_COST);
+    return Math.min(FINE_PEARL_BASE_COST * Math.pow(10, state.finePearlsPurchased), FINE_PEARL_MAX_COST);
   }
 
   function buyFinePearl(){
@@ -1237,6 +1240,7 @@
     if(state.pearls < cost) return;
     state.pearls -= cost;
     state.finePearls += 1;
+    state.finePearlsPurchased += 1;
     applyRoomDecor();
     save(); render();
   }
